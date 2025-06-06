@@ -23,8 +23,6 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import java.io.ByteArrayOutputStream
-import android.util.Base64
 import android.provider.MediaStore
 import com.example.businesscardocr.ui.theme.BusinessCardOCRTheme
 import okhttp3.OkHttpClient
@@ -34,6 +32,10 @@ import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.Header
 import retrofit2.http.POST
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.korean.KoreanTextRecognizerOptions
+import kotlinx.coroutines.tasks.await
 
 class MainActivity : ComponentActivity() {
     private val viewModel by viewModels<MainViewModel>()
@@ -89,19 +91,13 @@ class MainViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState
 
-    private val ocrApi: OcrApi
     private val nerApi: NerApi
+    private val recognizer =
+        TextRecognition.getClient(KoreanTextRecognizerOptions.Builder().build())
 
     init {
         val logging = HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY }
         val client = OkHttpClient.Builder().addInterceptor(logging).build()
-
-        ocrApi = Retrofit.Builder()
-            .baseUrl("https://vision.googleapis.com/")
-            .client(client)
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-            .create(OcrApi::class.java)
 
         nerApi = Retrofit.Builder()
             .baseUrl("https://api-inference.huggingface.co/")
@@ -113,19 +109,9 @@ class MainViewModel : ViewModel() {
 
     fun processImage(bitmap: Bitmap) {
         viewModelScope.launch {
-            val base64 = encodeImage(bitmap)
-            val ocrResponse = ocrApi.detectText(
-                OcrRequest(
-                    listOf(
-                        OcrImageRequest(
-                            ImageContent(base64),
-                            listOf(Feature("TEXT_DETECTION"))
-                        )
-                    )
-                ),
-                apiKey = "YOUR_VISION_API_KEY"
-            )
-            val text = ocrResponse.responses.firstOrNull()?.fullTextAnnotation?.text ?: ""
+            val image = InputImage.fromBitmap(bitmap, 0)
+            val textResult = recognizer.process(image).await()
+            val text = textResult.text
             _uiState.value = _uiState.value.copy(ocrText = text)
 
             val nerResponse = nerApi.analyze(
@@ -162,12 +148,6 @@ class MainViewModel : ViewModel() {
         return CategorizedText(name, phone, email, title, company)
     }
 
-    private fun encodeImage(bitmap: Bitmap): String {
-        val stream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
-        val bytes = stream.toByteArray()
-        return Base64.encodeToString(bytes, Base64.NO_WRAP)
-    }
 }
 
 data class UiState(
@@ -187,44 +167,6 @@ data class CategorizedText(
     val company: String
 )
 
-// OCR API models and interface
-
-data class OcrRequest(
-    val requests: List<OcrImageRequest>
-)
-
-data class OcrImageRequest(
-    val image: ImageContent,
-    val features: List<Feature>
-)
-
-data class ImageContent(
-    val content: String
-)
-
-data class Feature(
-    val type: String
-)
-
-data class OcrResponse(
-    val responses: List<OcrResult>
-)
-
-data class OcrResult(
-    val fullTextAnnotation: FullTextAnnotation?
-)
-
-data class FullTextAnnotation(
-    val text: String
-)
-
-interface OcrApi {
-    @POST("v1/images:annotate")
-    suspend fun detectText(
-        @Body request: OcrRequest,
-        @retrofit2.http.Query("key") apiKey: String
-    ): OcrResponse
-}
 
 // NER API models and interface
 
