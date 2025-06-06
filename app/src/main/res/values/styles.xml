@@ -1,0 +1,5 @@
+<resources>
+    <style name="Theme.BusinessCardOCR" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:colorBackground">@android:color/background_light</item>
+    </style>
+</resources>

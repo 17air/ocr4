@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">BusinessCardOCR</string>
+    <string name="take_photo">카메라찍기</string>
+    <string name="pick_gallery">갤러리 선택</string>
+    <string name="ocr_text">OCR 결과</string>
+    <string name="ner_result">분류 결과</string>
+</resources>
